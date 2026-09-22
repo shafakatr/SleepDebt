@@ -24,15 +24,28 @@ and draws your day around them.
 
 ## What it shows
 
-- An energy score out of 100, tied to your debt
-- Your predicted curve for today, against a dotted line showing the same day fully rested
-- Peak and dip bands, and a marker for right now
-- Seven habit windows — morning light, last caffeine, nap window, training, last alcohol,
-  last meal, screens down — all derived from your own wake time and target bedtime, so
-  they move as your schedule moves
-- Time asleep, sleep efficiency, and a deep/REM/core breakdown
-- A per-night list where you can flag a night that something outside woke you. The lost
-  sleep still counts toward debt; it just stops dragging your efficiency figure down.
+A dashboard of cards, in the order you'd actually want them:
+
+- **Your score** — out of 100, tied to your debt, with the hours owed, your average night,
+  and the sleep need everything is measured against
+- **Tonight** — the time to be asleep by and how long that is from now, on a timeline
+  running melatonin → screens down → asleep → wake
+- **Energy today** — your predicted curve against a dotted line showing the same day fully
+  rested, peak and dip bands, a marker for right now, and a lane showing where the habit
+  windows fall
+- **Today's habits** — seven windows (morning light, last caffeine, nap, training, last
+  alcohol, last meal, screens down), each tickable, each showing whether it has passed, is
+  open now, or is the next one up. All derived from your own wake time and target bedtime,
+  so they move as your schedule moves.
+- **Last 14 nights** — each night as a bar against your need line, so short nights are
+  obvious at a glance
+- **What those hours were made of** — a deep/REM/core breakdown and how much of your time
+  in bed was actually asleep
+- **Recent nights** — a per-night list where you can flag a night that something outside
+  woke you. The lost sleep still counts toward debt; it just stops dragging your efficiency
+  figure down.
+
+It's one column on a phone and a grid on a wider screen.
 
 ## Getting your own data in
 
@@ -46,7 +59,10 @@ to your clipboard. Five actions:
 4. **Combine Text** — Repeat Results, with New Lines
 5. **Copy to Clipboard**
 
-Then open the app and tap **Paste from clipboard**.
+Then open the app and tap **Paste from clipboard**. On a fresh install that button is on
+the opening screen; once you have data in, it moves behind the settings button in the top
+right, along with setting your sleep need by hand, re-estimating it, and clearing
+everything.
 
 ### The one thing that will trip you up
 
@@ -87,7 +103,7 @@ totals but has no stage breakdown.
 
 There is no backend. No analytics, no error reporting, no fonts or scripts loaded from
 anywhere. Your sleep data is held in `localStorage` on the device you pasted it into and
-is never transmitted. **Clear all data** wipes it.
+is never transmitted. **Clear all data**, in the settings sheet, wipes it.
 
 The trade-off: phone and laptop keep separate copies. Since the Shortcut always exports
 the last 14 days, one paste rebuilds everything on either one.
