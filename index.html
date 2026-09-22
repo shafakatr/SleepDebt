@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#131A2B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Energy">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%23131A2B'/%3E%3Cpath d='M20 122 Q52 58 92 76 T160 56' stroke='%23E9B44C' stroke-width='11' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<title>Sleep debt &amp; energy curve</title>
+<meta name="description" content="Turn Apple Health sleep data into a sleep debt figure and a predicted energy curve for your day. Free, open source, and computed entirely in your browser.">
+<meta property="og:title" content="Sleep debt &amp; energy curve">
+<meta property="og:description" content="Two numbers hide in your sleep data: how much you owe, and when your energy peaks and dips. Nothing is uploaded.">
+<meta property="og:type" content="website">
+<style>
+  :root{
+    --ink:#131A2B; --ink-2:#1B2440; --ink-3:#222D4E; --line:#2E3A5C;
+    --paper:#E7E3DA; --dim:#98A2BA; --faint:#6A748A;
+    --gold:#E9B44C; --cool:#5F84B1; --owed:#C2553F;
+    --deep:#4B6FA8; --rem:#9B7FC4; --core:#5E8F87;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; background:var(--ink)}
+  body{
+    font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
+    color:var(--paper); line-height:1.5; font-size:16px;
+    padding:max(16px,env(safe-area-inset-top)) 16px calc(30px + env(safe-area-inset-bottom));
+    max-width:840px; margin:0 auto;
+  }
+  .display{font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
+  header{display:flex; justify-content:space-between; align-items:baseline; margin:4px 0 16px; gap:12px}
+  header h1{font-size:16px; font-weight:600; margin:0; letter-spacing:-.01em}
+  header .meta{font-size:13px; color:var(--dim)}
+  .score{display:flex; align-items:center; gap:16px; margin-bottom:16px}
+  .ring{flex:0 0 78px; width:78px; height:78px; position:relative}
+  .ring svg{position:absolute; inset:0}
+  .ring b{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:25px; font-weight:400; font-family:"Iowan Old Style",Georgia,serif}
+  .score .txt p{margin:0}
+  .score .lead{font-size:17px}
+  .score .sub{font-size:13.5px; color:var(--dim); margin-top:3px}
+  svg{display:block; width:100%; height:auto}
+  .chartwrap{margin:0 -4px}
+  .legend{display:flex; gap:15px; flex-wrap:wrap; font-size:12.5px; color:var(--dim); margin:6px 2px 20px}
+  .legend span{display:inline-flex; align-items:center; gap:7px}
+  .sw{width:15px; height:3px; border-radius:2px; display:inline-block}
+  .panels{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+  @media (max-width:640px){.panels{grid-template-columns:1fr}}
+  .panel{background:var(--ink-2); border:1px solid var(--line); border-radius:12px; padding:14px 15px}
+  .panel.wide{grid-column:1/-1}
+  .panel h2{font-size:12.5px; font-weight:600; margin:0 0 10px; color:var(--dim)}
+  .big{font-size:29px; line-height:1.1; display:block}
+  .big small{font-size:14.5px; color:var(--dim); font-family:inherit}
+  .note{font-size:13px; color:var(--dim); margin:9px 0 0}
+  .bars{display:flex; align-items:flex-end; gap:3px; height:42px; margin-top:11px}
+  .bars div{flex:1; background:var(--cool); border-radius:2px 2px 0 0; min-height:2px}
+  .bars div.short{background:var(--owed)}
+  ul.hab{list-style:none; margin:0; padding:0}
+  ul.hab li{display:flex; align-items:center; gap:11px; padding:10px 0; border-bottom:1px solid var(--line); cursor:pointer}
+  ul.hab li:last-child{border-bottom:0; padding-bottom:2px}
+  ul.hab .box{flex:0 0 21px; width:21px; height:21px; border-radius:6px; border:1.5px solid var(--line);
+    display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--ink)}
+  ul.hab li.done .box{background:var(--gold); border-color:var(--gold)}
+  ul.hab li.done .nm{color:var(--dim); text-decoration:line-through}
+  ul.hab .nm{flex:1; font-size:14.5px}
+  ul.hab .tm{font-size:13.5px; color:var(--dim); font-variant-numeric:tabular-nums; white-space:nowrap}
+  ul.hab li.now .tm{color:var(--gold)}
+  ul.hab li.now .nm{color:var(--gold)}
+  .pip{flex:0 0 7px; width:7px; height:7px; border-radius:2px}
+  ul.nights{list-style:none; margin:0; padding:0}
+  ul.nights li{display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); cursor:pointer; font-size:14px}
+  ul.nights li:last-child{border-bottom:0; padding-bottom:2px}
+  ul.nights .dt{flex:0 0 58px; color:var(--dim)}
+  ul.nights .as{flex:0 0 66px; font-variant-numeric:tabular-nums}
+  ul.nights .ef{flex:0 0 46px; color:var(--dim); font-variant-numeric:tabular-nums; text-align:right}
+  ul.nights .fg{flex:1; font-size:12.5px; color:var(--dim); text-align:right}
+  ul.nights li.ext .fg{color:var(--rem)}
+  ul.nights li.ext .ef{color:var(--paper)}
+  .stagebar{display:flex; height:15px; border-radius:4px; overflow:hidden; margin-top:4px}
+  .stagebar i{display:block}
+  .key{display:flex; gap:14px; flex-wrap:wrap; font-size:12.5px; color:var(--dim); margin-top:10px}
+  .key span{display:inline-flex; align-items:center; gap:6px}
+  .dot{width:9px; height:9px; border-radius:2px; display:inline-block}
+  details{margin-top:18px; border-top:1px solid var(--line); padding-top:12px}
+  summary{cursor:pointer; font-size:13.5px; color:var(--dim); padding:6px 0}
+  textarea{width:100%; margin-top:10px; min-height:110px; padding:12px; background:var(--ink);
+    color:var(--paper); border:1px solid var(--line); border-radius:8px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px; line-height:1.6; resize:vertical}
+  .row{display:flex; gap:9px; align-items:center; margin-top:11px; flex-wrap:wrap}
+  button{background:var(--gold); color:#1A1406; border:0; border-radius:9px; padding:12px 18px;
+    font-size:15px; font-weight:600; cursor:pointer; font-family:inherit; min-height:44px}
+  button.ghost{background:transparent; color:var(--dim); border:1px solid var(--line)}
+  #grab{width:100%; font-size:16px}
+  label.need{font-size:13px; color:var(--dim); display:inline-flex; align-items:center; gap:7px}
+  input[type=number]{width:66px; padding:9px 8px; background:var(--ink); color:var(--paper);
+    border:1px solid var(--line); border-radius:6px; font-family:inherit; font-size:14px}
+  .status{font-size:13px; color:var(--dim); margin-top:10px; min-height:18px}
+  .intro{max-width:56ch}
+  .intro h2{font-size:23px; font-weight:400; margin:6px 0 10px; line-height:1.25}
+  .intro p{font-size:15.5px; color:var(--dim); margin:0 0 16px}
+  .intro .fine{font-size:13px; margin:14px 0 0}
+  #demo{font-size:16px; padding:13px 22px}
+  .setup{margin-top:26px; border-top:1px solid var(--line); padding-top:18px; max-width:62ch}
+  .setup h3{font-size:14px; font-weight:600; margin:0 0 4px}
+  .setup p{font-size:13.5px; color:var(--dim); margin:0 0 12px}
+  .setup ol{margin:0; padding-left:20px; font-size:14px; color:var(--dim)}
+  .setup li{margin-bottom:7px}
+  .setup code{font-size:12.5px; color:var(--paper); background:var(--ink-2); padding:2px 5px; border-radius:4px}
+  .setup .warn{color:var(--paper)}
+  .banner{display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:var(--ink-3); border:1px solid var(--line); border-radius:9px;
+    padding:9px 13px; font-size:13.5px; color:var(--dim); margin-bottom:14px}
+  button.link{background:none; border:0; color:var(--gold); font-size:13.5px; padding:0;
+    min-height:0; text-decoration:underline; cursor:pointer; font-weight:400}
+  .empty{font-size:15px; color:var(--dim)}
+  .empty code{font-size:12.5px; color:var(--paper)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+(function(){
+var root=document.getElementById('root');
+var KEY='sleep-energy-v2';
+var GAP=3;
+var state={text:'',need:null,done:{},ext:{},sample:false};
+var AWAKE=/awake|in\s*bed|inbed/i, DEEP=/deep/i, REMX=/rem/i;
+var HOST=(typeof window!=='undefined'&&window.storage&&window.storage.get)?window.storage:null;
+
+function load(cb){
+  if(HOST){
+    HOST.get(KEY).then(function(r){
+      try{ if(r&&r.value){var p=JSON.parse(r.value); if(typeof p.text==='string'){state=p; state.done=state.done||{}; state.ext=state.ext||{};}} }catch(e){}
+      cb();
+    }).catch(cb); return;
+  }
+  try{ var s=localStorage.getItem(KEY); if(s){var p=JSON.parse(s); if(typeof p.text==='string'){state=p; state.done=state.done||{}; state.ext=state.ext||{};}} }catch(e){}
+  cb();
+}
+function save(){
+  try{
+    if(HOST){ HOST.set(KEY,JSON.stringify(state)); return true; }
+    localStorage.setItem(KEY,JSON.stringify(state)); return true;
+  }catch(e){ return false; }
+}
+
+function srnd(seed){var x=seed>>>0;return function(){x=(x+0x6D2B79F5)>>>0;var t=x;
+  t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296}}
+function p2(n){return String(n).padStart(2,'0')}
+function stamp(d){return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate())+' '+p2(d.getHours())+':'+p2(d.getMinutes())}
+function makeSample(){
+  var plan=[[95,392,0],[150,300,0],[75,438,0],[130,352,0],[45,455,0],
+            [110,368,52],[85,410,0],[165,295,0],[60,470,0],[120,360,0],
+            [100,385,0],[140,330,0],[70,445,0],[88,404,0]];
+  var out=[], base=new Date(); base.setHours(0,0,0,0);
+  for(var i=0;i<plan.length;i++){
+    var wd=new Date(base); wd.setDate(base.getDate()-(plan.length-1-i));
+    var on=new Date(wd); on.setHours(22,0,0,0); on.setDate(on.getDate()-1);
+    on=new Date(+on+plan[i][0]*60000);
+    var total=plan[i][1], aw=plan[i][2], r=srnd(1000+i), t=new Date(+on), slept=0, placed=false;
+    while(slept<total){
+      var f=slept/total, len, st;
+      if(f<0.06){ st='Core'; len=10+Math.floor(r()*12); }
+      else if(f<0.40){ st=r()<0.45?'Deep':'Core'; len=8+Math.floor(r()*28); }
+      else if(f<0.75){ st=r()<0.30?'REM':'Core'; len=10+Math.floor(r()*32); }
+      else { st=r()<0.45?'REM':'Core'; len=10+Math.floor(r()*30); }
+      if(slept+len>total) len=total-slept;
+      if(len<=0) break;
+      var e=new Date(+t+len*60000);
+      out.push(stamp(t)+' | '+stamp(e)+' | '+st);
+      t=e; slept+=len;
+      if(!placed && aw>0 && f>0.33){
+        var ae=new Date(+t+aw*60000);
+        out.push(stamp(t)+' | '+stamp(ae)+' | Awake'); t=ae; placed=true;
+      } else if(r()<0.16 && slept<total){
+        var se=new Date(+t+(1+Math.floor(r()*4))*60000);
+        out.push(stamp(t)+' | '+stamp(se)+' | Awake'); t=se;
+      }
+    }
+  }
+  return out.join('\n');
+}
+
+function parseSegments(text){
+  var segs=[];
+  text.split(/\n+/).forEach(function(line){
+    if(!line.trim()) return;
+    var p=line.split('|').map(function(s){return s.trim()});
+    if(p.length<3) return;
+    var a=new Date(p[0].replace(' ','T')), b=new Date(p[1].replace(' ','T'));
+    if(isNaN(a)||isNaN(b)||b<=a) return;
+    segs.push({start:a,end:b,stage:p[2],hours:(b-a)/3600000});
+  });
+  segs.sort(function(x,y){return x.start-y.start});
+  return segs;
+}
+function buildNights(segs){
+  var ps=[],cur=null;
+  segs.forEach(function(s){
+    if(cur&&(s.start-cur.lastEnd)/3600000<=GAP){cur.segs.push(s); if(s.end>cur.lastEnd)cur.lastEnd=s.end;}
+    else{ if(cur)ps.push(cur); cur={segs:[s],lastEnd:s.end}; }
+  });
+  if(cur)ps.push(cur);
+  return ps.map(function(p){
+    var as=p.segs.filter(function(s){return !AWAKE.test(s.stage)});
+    if(!as.length) return null;
+    var asleep=as.reduce(function(a,s){return a+s.hours},0);
+    var start=as[0].start,end=as[as.length-1].end,deep=0,rem=0,core=0;
+    as.forEach(function(s){
+      if(DEEP.test(s.stage))deep+=s.hours;
+      else if(REMX.test(s.stage))rem+=s.hours;
+      else core+=s.hours;
+    });
+    var longAwake=p.segs.filter(function(s){return AWAKE.test(s.stage)&&s.start>=start&&s.end<=end&&s.hours>=0.25})
+      .reduce(function(a,s){return a+s.hours},0);
+    return {start:start,end:end,asleep:asleep,deep:deep,rem:rem,core:core,longAwake:longAwake,
+      mid:new Date((+start + +end)/2), inBed:(end-start)/3600000, key:localKey(end),
+      label:end.toLocaleDateString(undefined,{month:'short',day:'numeric'})};
+  }).filter(function(n){return n&&n.asleep>=2.5}).reverse();
+}
+function localKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function hOf(d){return d.getHours()+d.getMinutes()/60}
+function circ(h){return h<12?h+24:h}
+function estimateNeed(ns){
+  var s=ns.map(function(n){return n.asleep}).sort(function(a,b){return b-a});
+  var t=Math.max(2,Math.round(s.length*0.2));
+  return Math.min(9.5,Math.max(6.5,Math.round((s.slice(0,t).reduce(function(a,b){return a+b},0)/t)*4)/4));
+}
+function nightEff(n){
+  var bed=n.inBed-(state.ext[n.key]?n.longAwake:0);
+  return n.asleep/Math.max(n.asleep,bed);
+}
+function analyse(ns,ov){
+  if(!ns.length) return null;
+  var r=ns.slice(0,14), need=ov||estimateNeed(ns);
+  var debt=r.reduce(function(a,n){return a+Math.max(0,need-n.asleep)},0);
+  var avg=r.reduce(function(a,n){return a+n.asleep},0)/r.length;
+  var eff=r.reduce(function(a,n){return a+nightEff(n)},0)/r.length;
+  var w=r.map(function(n){return hOf(n.end)}).sort(function(a,b){return a-b});
+  var wake=w[Math.floor(w.length/2)];
+  var o=r.map(function(n){return circ(hOf(n.start))}).sort(function(a,b){return a-b});
+  var onset=o[Math.floor(o.length/2)];
+  var ideal=circ(wake)-(need+0.5);
+  var target=Math.max(ideal,onset-0.5);
+  var tot=r.reduce(function(a,n){return a+n.asleep},0);
+  var score=Math.max(0,Math.min(100,Math.round(100*(1-debt/28))));
+  return {need:need,debt:debt,avg:avg,eff:eff,wake:wake,onset:onset,target:target,score:score,
+    stages:{deep:r.reduce(function(a,n){return a+n.deep},0)/tot,
+            rem:r.reduce(function(a,n){return a+n.rem},0)/tot,
+            core:r.reduce(function(a,n){return a+n.core},0)/tot},
+    recent:r,n:r.length,total:ns.length};
+}
+var ANCHORS=[[-0.6,0.06],[0,0.22],[1,0.56],[2,0.82],[3.2,0.95],[5,0.90],[6.5,0.72],
+  [8.8,0.44],[10.5,0.62],[12.5,0.74],[14,0.70],[15.8,0.38],[17,0.14],[18,0.05]];
+function energyAt(h){
+  var a=ANCHORS;
+  if(h<=a[0][0])return a[0][1];
+  if(h>=a[a.length-1][0])return a[a.length-1][1];
+  for(var i=0;i<a.length-1;i++){
+    if(h<=a[i+1][0]){var t=(h-a[i][0])/(a[i+1][0]-a[i][0]),s=t*t*(3-2*t);return a[i][1]+(a[i+1][1]-a[i][1])*s}
+  }
+  return 0;
+}
+function dFactor(d){return Math.max(0.42,1-Math.min(d,24)/42)}
+function fmtClock(h){
+  h=((h%24)+24)%24;
+  var hh=Math.floor(h),mm=Math.round((h-hh)*60);
+  if(mm===60){mm=0;hh=(hh+1)%24}
+  var ap=hh>=12?'pm':'am',d=hh%12; if(d===0)d=12;
+  return d+':'+String(mm).padStart(2,'0')+ap;
+}
+function fmtDur(h){var hh=Math.floor(h);return hh+'h '+String(Math.round((h-hh)*60)).padStart(2,'0')+'m'}
+function today(){return localKey(new Date())}
+
+function habits(a){
+  var B=a.target, W=a.wake, toB=circ(B)-circ(W); if(toB<0) toB+=24;
+  var L=[
+    {id:'light',  nm:'Get outside light',   from:0.3,      to:1.3,       c:'var(--gold)'},
+    {id:'caff',   nm:'Last caffeine',        at:toB-11,                   c:'var(--owed)'},
+    {id:'nap',    nm:'Nap window, 20 min',  from:8.3,      to:9.3,       c:'var(--cool)', onlyIf:a.debt>5},
+    {id:'move',   nm:'Move or train',        from:9.5,      to:toB-2.5,   c:'var(--core)'},
+    {id:'booze',  nm:'Last alcohol',         at:toB-4,                    c:'var(--owed)'},
+    {id:'meal',   nm:'Last real meal',       at:toB-3,                    c:'var(--owed)'},
+    {id:'dim',    nm:'Screens down, dim light', at:toB-1.5,               c:'var(--rem)'}
+  ];
+  return L.filter(function(h){return h.onlyIf===undefined||h.onlyIf})
+          .map(function(h){
+            h.start=(h.at!==undefined)?h.at:h.from;
+            h.end=(h.at!==undefined)?h.at:h.to;
+            h.time=(h.at!==undefined)?('by '+fmtClock(W+h.at)):(fmtClock(W+h.from)+' \u2013 '+fmtClock(W+h.to));
+            return h;
+          }).sort(function(x,y){return x.start-y.start});
+}
+
+function chart(a,hs,nh){
+  var nw=(typeof window!=='undefined'&&window.innerWidth<620);
+  var W=nw?430:760, H=nw?300:320, pL=6,pR=6, top=nw?26:24;
+  var axis=nw?196:214, lane=nw?236:250, s0=-1.2, s1=18.4;
+  var fs=nw?13:12, step=nw?4:3;
+  function x(h){return pL+(h-s0)/(s1-s0)*(W-pL-pR)}
+  function y(e){return top+(1-e)*(axis-top)}
+  var f=dFactor(a.debt);
+  function path(k){var d='';for(var h=s0;h<=s1;h+=0.12){d+=(d?'L':'M')+x(h).toFixed(1)+' '+y(energyAt(h)*k).toFixed(1)+' '}return d.trim()}
+  var actual=path(f), o='';
+
+  o+='<rect x="'+x(2.2).toFixed(1)+'" y="'+top+'" width="'+(x(5.4)-x(2.2)).toFixed(1)+'" height="'+(axis-top)+'" fill="var(--gold)" opacity="0.07"/>';
+  o+='<rect x="'+x(7.6).toFixed(1)+'" y="'+top+'" width="'+(x(9.9)-x(7.6)).toFixed(1)+'" height="'+(axis-top)+'" fill="var(--cool)" opacity="0.11"/>';
+  o+='<text x="'+x(3.8).toFixed(1)+'" y="'+(top+14)+'" fill="var(--dim)" font-size="'+fs+'" text-anchor="middle" font-family="ui-sans-serif,sans-serif">peak</text>';
+  o+='<text x="'+x(8.75).toFixed(1)+'" y="'+(top+14)+'" fill="var(--dim)" font-size="'+fs+'" text-anchor="middle" font-family="ui-sans-serif,sans-serif">dip</text>';
+
+  for(var h=0;h<=18;h+=step){
+    o+='<line x1="'+x(h).toFixed(1)+'" y1="'+top+'" x2="'+x(h).toFixed(1)+'" y2="'+axis+'" stroke="var(--line)" stroke-width="1"/>';
+    o+='<text x="'+x(h).toFixed(1)+'" y="'+(axis+19)+'" fill="var(--dim)" font-size="'+fs+'" text-anchor="middle" font-family="ui-sans-serif,sans-serif">'+fmtClock(a.wake+h)+'</text>';
+  }
+
+  o+='<path d="'+actual+' L'+x(s1).toFixed(1)+' '+y(0)+' L'+x(s0).toFixed(1)+' '+y(0)+' Z" fill="url(#fl)"/>';
+  o+='<path d="'+path(1)+'" fill="none" stroke="var(--dim)" stroke-width="1.4" stroke-dasharray="5 5" opacity="0.5"/>';
+  o+='<path d="'+actual+'" fill="none" stroke="var(--gold)" stroke-width="2.6" stroke-linecap="round"/>';
+
+  hs.forEach(function(hb){
+    if(hb.at!==undefined){
+      var px=x(hb.at);
+      o+='<line x1="'+px.toFixed(1)+'" y1="'+(lane-6)+'" x2="'+px.toFixed(1)+'" y2="'+(lane+6)+'" stroke="'+hb.c+'" stroke-width="2.5" stroke-linecap="round"/>';
+    } else {
+      var x0=x(hb.from), x1v=x(hb.to);
+      o+='<rect x="'+x0.toFixed(1)+'" y="'+(lane-5)+'" width="'+Math.max(4,(x1v-x0)).toFixed(1)+'" height="10" rx="5" fill="'+hb.c+'" opacity="0.75"/>';
+    }
+  });
+  o+='<text x="'+pL+'" y="'+(lane+28)+'" fill="var(--dim)" font-size="'+fs+'" font-family="ui-sans-serif,sans-serif">habit windows</text>';
+
+  if(nh>=s0&&nh<=s1){
+    o+='<line x1="'+x(nh).toFixed(1)+'" y1="'+top+'" x2="'+x(nh).toFixed(1)+'" y2="'+(lane+10)+'" stroke="var(--gold)" stroke-width="1.5" stroke-dasharray="3 4"/>';
+    o+='<circle cx="'+x(nh).toFixed(1)+'" cy="'+y(energyAt(nh)*f).toFixed(1)+'" r="5.5" fill="var(--gold)"/>';
+    o+='<text x="'+x(nh).toFixed(1)+'" y="'+(top-8)+'" fill="var(--gold)" font-size="'+fs+'" text-anchor="middle" font-family="ui-sans-serif,sans-serif">now</text>';
+  }
+
+  return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Predicted energy and habit windows across today">'+
+    '<defs><linearGradient id="fl" x1="0" y1="0" x2="0" y2="1">'+
+    '<stop offset="0%" stop-color="var(--gold)" stop-opacity="0.28"/>'+
+    '<stop offset="100%" stop-color="var(--gold)" stop-opacity="0.02"/></linearGradient></defs>'+o+'</svg>';
+}
+
+function ringSVG(score){
+  var r=33,c=2*Math.PI*r,on=c*score/100;
+  return '<svg viewBox="0 0 78 78">'+
+    '<circle cx="39" cy="39" r="'+r+'" fill="none" stroke="var(--line)" stroke-width="6"/>'+
+    '<circle cx="39" cy="39" r="'+r+'" fill="none" stroke="var(--gold)" stroke-width="6" stroke-linecap="round"'+
+    ' stroke-dasharray="'+on.toFixed(1)+' '+c.toFixed(1)+'" transform="rotate(-90 39 39)"/></svg>';
+}
+
+function render(status){
+  var segs=parseSegments(state.text), ns=buildNights(segs), a=analyse(ns,state.need);
+  var body='';
+
+  if(!a){
+    body='<div class="intro">'+
+      '<h2 class="display">Your sleep, turned into a plan for the day</h2>'+
+      '<p>Two numbers hide in your Apple Health data: how much sleep you owe, and when your energy will actually peak and dip. This works both out and draws your day around them.</p>'+
+      '<button id="demo">See it with sample data</button>'+
+      '<p class="fine">Nothing is uploaded. Every calculation runs in this browser and stays on this device.</p>'+
+    '</div>'+
+    '<div class="setup"><h3>To use your own sleep</h3>'+
+      '<p>You need a Shortcut that reads Apple Health on your iPhone and copies the last 14 nights to your clipboard. Five actions:</p>'+
+      '<ol>'+
+      '<li><b>Find Health Samples where</b> &mdash; All of: Type is Sleep; Start Date is in the last 14 days</li>'+
+      '<li><b>Repeat with each item in</b> Health Samples</li>'+
+      '<li><b>Text</b> &mdash; Repeat Item Start Date, then <code>|</code>, then End Date, then <code>|</code>, then Value. Both dates set to custom format <code>yyyy-MM-dd HH:mm</code></li>'+
+      '<li><b>Combine Text</b> &mdash; Repeat Results, with New Lines</li>'+
+      '<li><b>Copy to Clipboard</b></li>'+
+      '</ol>'+
+      '<p style="margin-top:12px" class="warn">Turn on Settings &rsaquo; Shortcuts &rsaquo; Advanced &rsaquo; Allow Sharing Large Amounts of Data first, or it will refuse to run.</p>'+
+    '</div>';
+  } else {
+    var now=new Date(), nh=circ(hOf(now))-circ(a.wake);
+    if(nh<-1.2) nh+=24;
+    var hs=habits(a), d=today(), done=state.done[d]||[];
+
+    var mood = a.score>=75?'Running close to full.':a.score>=50?'Some drag, but workable.':a.score>=25?'Meaningfully short.':'Deep in the hole.';
+
+    if(state.sample) body+='<div class="banner">Sample data, not your sleep. <button class="link" id="clearsample">Clear it</button></div>';
+    body+='<div class="score"><div class="ring">'+ringSVG(a.score)+'<b>'+a.score+'</b></div>'+
+      '<div class="txt"><p class="lead">'+mood+'</p>'+
+      '<p class="sub">'+fmtDur(a.debt)+' owed across '+a.n+' nights. Under 5h is where it stops biting.</p></div></div>';
+
+    body+='<div class="chartwrap">'+chart(a,hs,nh)+'</div>'+
+      '<div class="legend">'+
+      '<span><i class="sw" style="background:var(--gold)"></i>today</span>'+
+      '<span><i class="sw" style="background:var(--dim)"></i>fully rested</span>'+
+      '<span><i class="sw" style="background:var(--cool)"></i>dip</span></div>';
+
+    var lis=hs.map(function(hb){
+      var on=(hb.at===undefined&&nh>=hb.from&&nh<=hb.to)||(hb.at!==undefined&&Math.abs(nh-hb.at)<0.5);
+      var isDone=done.indexOf(hb.id)>-1;
+      return '<li data-id="'+hb.id+'" class="'+(isDone?'done ':'')+(on?'now':'')+'">'+
+        '<i class="box">'+(isDone?'\u2713':'')+'</i>'+
+        '<i class="pip" style="background:'+hb.c+'"></i>'+
+        '<span class="nm">'+hb.nm+'</span><span class="tm">'+hb.time+'</span></li>';
+    }).join('');
+
+    var bars=a.recent.slice().reverse().map(function(n){
+      return '<div'+(n.asleep<a.need-1?' class="short"':'')+' style="height:'+Math.max(2,(n.asleep/9)*42).toFixed(0)+'px" title="'+n.label+': '+fmtDur(n.asleep)+'"></div>';
+    }).join('');
+
+    var nightRows=a.recent.map(function(n){
+      var flag=!!state.ext[n.key], up=Math.round(n.longAwake*60);
+      var tag=flag?'external':(up>=15?up+'m awake':'');
+      return '<li data-key="'+n.key+'" class="'+(flag?'ext':'')+'">'+
+        '<span class="dt">'+n.label+'</span>'+
+        '<span class="as">'+fmtDur(n.asleep)+'</span>'+
+        '<span class="ef">'+Math.round(nightEff(n)*100)+'%</span>'+
+        '<span class="fg">'+tag+'</span></li>';
+    }).join('');
+
+    var st=a.stages;
+    body+='<div class="panels">'+
+      '<div class="panel wide"><h2>Today\u2019s habits</h2><ul class="hab">'+lis+'</ul>'+
+      '<p class="note">Times are derived from your own wake and target bedtime, so they move as your schedule does.</p></div>'+
+
+      '<div class="panel"><h2>Sleep debt, last '+a.n+' nights</h2>'+
+      '<span class="big display">'+fmtDur(a.debt)+' <small>owed</small></span>'+
+      '<div class="bars">'+bars+'</div>'+
+      '<p class="note">Averaging '+fmtDur(a.avg)+' asleep against a '+a.need+'h need.</p></div>'+
+
+      '<div class="panel"><h2>Tonight</h2>'+
+      '<span class="big display">'+fmtClock(a.target)+'</span>'+
+      '<p class="note">Asleep by this, waking '+fmtClock(a.wake)+'. Melatonin starts around '+fmtClock(a.target-1.8)+'. Usual bedtime is '+fmtClock(a.onset)+'.</p></div>'+
+
+      '<div class="panel wide"><h2>Recent nights</h2><ul class="nights">'+nightRows+'</ul>'+
+      '<p class="note">Tap a night if something outside woke you \u2014 a kid, a noise, a call. The lost sleep still counts toward debt, but it stops dragging your efficiency figure down.</p></div>'+
+
+      '<div class="panel wide"><h2>What those hours were made of</h2>'+
+      '<div class="stagebar">'+
+      '<i style="background:var(--deep); width:'+(st.deep*100).toFixed(1)+'%"></i>'+
+      '<i style="background:var(--rem); width:'+(st.rem*100).toFixed(1)+'%"></i>'+
+      '<i style="background:var(--core); width:'+(st.core*100).toFixed(1)+'%"></i></div>'+
+      '<div class="key">'+
+      '<span><i class="dot" style="background:var(--deep)"></i>deep '+Math.round(st.deep*100)+'%</span>'+
+      '<span><i class="dot" style="background:var(--rem)"></i>rem '+Math.round(st.rem*100)+'%</span>'+
+      '<span><i class="dot" style="background:var(--core)"></i>core '+Math.round(st.core*100)+'%</span>'+
+      '<span>asleep '+Math.round(a.eff*100)+'% of time in bed</span></div>'+
+      '<p class="note">Need estimated at '+a.need+'h from your longest nights'+(state.need?' (set by hand)':'')+'. '+segs.length+' segments across '+a.total+' nights.</p></div>'+
+    '</div>';
+  }
+
+  root.innerHTML=
+    '<header><h1 class="display">'+(a?'Where your energy actually is':'Sleep debt &amp; energy curve')+'</h1>'+
+    '<span class="meta">'+(a?a.n+' nights':'')+'</span></header>'+body+
+    '<details'+(a?'':' open')+'><summary>Update data</summary>'+
+    '<div class="row"><button'+(a?'':' class="ghost"')+' id="grab">Paste from clipboard</button></div>'+
+    '<textarea id="ta" spellcheck="false" placeholder="2026-09-13 07:32|2026-09-13 07:49|Core">'+state.text.replace(/</g,'&lt;')+'</textarea>'+
+    '<div class="row"><button id="save">Save</button>'+
+    '<label class="need">Sleep need <input id="need" type="number" min="5" max="11" step="0.25" placeholder="auto" value="'+(state.need||'')+'"> h</label>'+
+    '<button class="ghost" id="auto">Estimate it</button>'+
+    (a?'<button class="ghost" id="wipe">Clear all data</button>':'')+'</div>'+
+    '<p class="status">'+(status||'Stays in this browser. Nothing is sent anywhere.')+'</p></details>';
+
+  Array.prototype.forEach.call(root.querySelectorAll('ul.hab li'),function(li){
+    li.onclick=function(){
+      var d=today(), id=li.getAttribute('data-id');
+      state.done[d]=state.done[d]||[];
+      var i=state.done[d].indexOf(id);
+      if(i>-1) state.done[d].splice(i,1); else state.done[d].push(id);
+      var keys=Object.keys(state.done).sort();
+      while(keys.length>21){ delete state.done[keys.shift()]; }
+      save(); render(status);
+    };
+  });
+
+  Array.prototype.forEach.call(root.querySelectorAll('ul.nights li'),function(li){
+    li.onclick=function(){
+      var k=li.getAttribute('data-key');
+      if(state.ext[k]) delete state.ext[k]; else state.ext[k]=1;
+      save(); render(status);
+    };
+  });
+
+  var demo=document.getElementById('demo');
+  if(demo) demo.onclick=function(){
+    state.text=makeSample(); state.sample=true; state.done={}; state.ext={};
+    save(); render('Sample data loaded. Clear it whenever you like.');
+  };
+  var cs=document.getElementById('clearsample');
+  if(cs) cs.onclick=function(){
+    state.text=''; state.sample=false; state.done={}; state.ext={};
+    save(); render('Sample cleared.');
+  };
+  var wipe=document.getElementById('wipe');
+  if(wipe) wipe.onclick=function(){
+    state={text:'',need:null,done:{},ext:{},sample:false};
+    save(); render('Everything cleared from this device.');
+  };
+
+  document.getElementById('grab').onclick=function(){
+    if(!navigator.clipboard||!navigator.clipboard.readText){ render('Clipboard unavailable here \u2014 paste by hand.'); return; }
+    navigator.clipboard.readText().then(function(t){
+      if(!t||t.indexOf('|')===-1){ render('That clipboard doesn\u2019t look like sleep data.'); return; }
+      state.text=t; state.sample=false;
+      var c=buildNights(parseSegments(t)).length;
+      render(save()?'Updated. '+c+' night'+(c===1?'':'s')+' read.':c+' nights read, saving failed.');
+    }).catch(function(){ render('Clipboard blocked \u2014 paste by hand.'); });
+  };
+  document.getElementById('save').onclick=function(){
+    state.text=document.getElementById('ta').value; state.sample=false;
+    var v=parseFloat(document.getElementById('need').value);
+    state.need=isNaN(v)?null:v;
+    var c=buildNights(parseSegments(state.text)).length;
+    render(save()?'Saved. '+c+' night'+(c===1?'':'s')+' read.':c+' nights read, saving failed.');
+  };
+  document.getElementById('auto').onclick=function(){
+    state.text=document.getElementById('ta').value;
+    state.need=null; save(); render('Need estimated from your longest nights.');
+  };
+}
+
+load(function(){ render(); });
+setInterval(function(){ if(!document.querySelector('details[open]')) render(); },300000);
+})();
+</script>
+</body>
+</html>
