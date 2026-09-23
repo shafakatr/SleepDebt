@@ -6,7 +6,7 @@ energy will actually peak and dip today.
 One HTML file. No framework, no build step, no server, no account. Every calculation
 runs in your browser and your data never leaves the device.
 
-**[Open it →](https://sleepdebt-zeta.vercel.app)** &nbsp;·&nbsp; there's a **See it with sample data** button, so you can
+**[Open it →](https://shafakat.studio/sleepdebt)** &nbsp;·&nbsp; there's a **See it with sample data** button, so you can
 look before setting anything up.
 
 ## Why
